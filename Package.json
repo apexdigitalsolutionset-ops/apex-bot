@@ -1,7 +1,7 @@
 {
   "name": "apex-bot",
   "version": "1.0.0",
-  "description": "APEX Digital Solution Official Bot",
+  "description": "APEX Digital Solution Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
