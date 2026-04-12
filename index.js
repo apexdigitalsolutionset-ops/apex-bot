@@ -11,150 +11,247 @@ app.listen(PORT, () => console.log(`➢ Server running on port ${PORT}`));
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Session ለፎርም እና ለኮንትራት መረጃ ማቆያ
 bot.use(session());
 
-// የተፈቀደው አይኮን እና ርዕስ
 const I = '➢'; 
 const TITLE = '<b><i><code>APEX Digital Solution</code></i></b>';
 
-// ==========================================
-// SESSION INITIALIZATION MIDDLEWARE
-// ==========================================
 bot.use((ctx, next) => {
     ctx.session ??= { form: {}, step: 'idle', pendingContract: null, formStatus: 'incomplete', lang: 'am' };
     return next();
 });
 
-// ==========================================
-// DATE CALCULATION HELPER
-// ==========================================
 function getContractDates(durationDays) {
     const start = new Date();
     const end = new Date();
     end.setDate(start.getDate() + parseInt(durationDays));
-    
     const formatDate = (d) => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
     return { start: formatDate(start), end: formatDate(end) };
 }
 
 // ==========================================
-// START MENU (Language Selection ONLY)
+// 1. START & LANGUAGE
 // ==========================================
 bot.start(async (ctx) => {
     ctx.session = { form: {}, step: 'idle', pendingContract: null, formStatus: 'incomplete', lang: 'am' };
-    
     const langText = `${TITLE}\n\n${I} To provide you with the best experience, please select your preferred language.\n\n${I} የተሻለ አገልግሎት ለመስጠት እንዲያመችዎ እባክዎ የሚፈልጉትን ቋንቋ ይምረጡ።`;
-    
     await ctx.replyWithHTML(langText, {
         reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('English', 'main_en'), Markup.button.callback('አማርኛ', 'main_am')]
+            [Markup.button.callback('English', 'lang_en'), Markup.button.callback('አማርኛ', 'lang_am')]
         ]).reply_markup
     });
 });
 
-bot.action('cmd_back', async (ctx) => {
+bot.action('cmd_lang', async (ctx) => {
     await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n${I} Please select your preferred language.\n\n${I} እባክዎ የሚፈልጉትን ቋንቋ ይምረጡ።`;
-    await ctx.editMessageText(text, {
+    const langText = `${TITLE}\n\n${I} Please select your preferred language.\n\n${I} እባክዎ የሚፈልጉትን ቋንቋ ይምረጡ።`;
+    await ctx.editMessageText(langText, {
         parse_mode: 'HTML',
         reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('English', 'main_en'), Markup.button.callback('አማርኛ', 'main_am')]
+            [Markup.button.callback('English', 'lang_en'), Markup.button.callback('አማርኛ', 'lang_am')]
         ]).reply_markup
     });
 });
 
-// ==========================================
-// LANGUAGE MENUS (AMHARIC & ENGLISH)
-// ==========================================
-
-// --- AMHARIC MENU ---
-bot.action('main_am', async (ctx) => {
+bot.action('lang_am', async (ctx) => {
     await ctx.answerCbQuery();
     ctx.session.lang = 'am';
-    const text = `${TITLE}\n\n${I} የንግድዎን ዲጂታል ሽግግር እናሳልጣለን።\n\n${I} አገልግሎቶቻችንን ለመመልከት ከታች ካሉት አማራጮች አንዱን ይምረጡ።`;
-    await ctx.editMessageText(text, { 
-        parse_mode: 'HTML', 
-        reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('📝 የትዕዛዝ ፎርም (My Form)', 'start_form')],
-            [Markup.button.callback('💼 አገልግሎቶች (Services)', 'srv_menu_am')],
-            [Markup.button.callback('🌍 ቋንቋ ቀይር', 'cmd_back')]
-        ]).reply_markup 
-    });
+    await sendMainMenu(ctx);
 });
 
-bot.action('srv_menu_am', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n${I} ለዲጂታል እድገትዎ ስልታዊ መፍትሄዎች።`;
-    await ctx.editMessageText(text, { 
-        parse_mode: 'HTML', 
-        reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('📦 የጥቅል ዝርዝሮች (Packages)', 'pkg_menu_am')],
-            [Markup.button.callback('📌 ነጠላ አገልግሎቶች (Individuals)', 'indv_srv_am')],
-            [Markup.button.callback('⬅️ ተመለስ', 'main_am')]
-        ]).reply_markup 
-    });
-});
-
-// --- ENGLISH MENU ---
-bot.action('main_en', async (ctx) => {
+bot.action('lang_en', async (ctx) => {
     await ctx.answerCbQuery();
     ctx.session.lang = 'en';
-    const text = `${TITLE}\n\n${I} Elevating your digital presence.\n\n${I} Please choose an option below to explore our services.`;
+    await sendMainMenu(ctx);
+});
+
+async function sendMainMenu(ctx) {
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn 
+        ? `${TITLE}\n\n${I} Elevating your digital presence.\n\n${I} Please choose an option below.` 
+        : `${TITLE}\n\n${I} የንግድዎን ዲጂታል ሽግግር እናሳልጣለን።\n\n${I} ከታች ካሉት አማራጮች አንዱን ይምረጡ።`;
+
+    const menu = [
+        [Markup.button.callback(isEn ? 'Services' : 'አገልግሎቶች (Services)', 'menu_services')],
+        [Markup.button.callback(isEn ? 'My Form' : 'የትዕዛዝ ፎርም (My Form)', 'start_form')],
+        [Markup.button.callback(isEn ? 'More...' : 'ተጨማሪ (More...)', 'menu_more')],
+        [Markup.button.callback(isEn ? 'Change Language' : 'ቋንቋ ቀይር', 'cmd_lang')]
+    ];
+
+    if (ctx.updateType === 'callback_query') {
+        await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: menu } });
+    } else {
+        await ctx.replyWithHTML(text, { reply_markup: { inline_keyboard: menu } });
+    }
+}
+
+bot.action('menu_main', async (ctx) => {
+    await ctx.answerCbQuery();
+    await sendMainMenu(ctx);
+});
+
+// ==========================================
+// 2. SERVICES MENU (Packages & Individuals)
+// ==========================================
+bot.action('menu_services', async (ctx) => {
+    await ctx.answerCbQuery();
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn ? `${TITLE}\n\n${I} Strategic solutions for your digital growth.` : `${TITLE}\n\n${I} ለዲጂታል እድገትዎ ስልታዊ መፍትሄዎች።`;
+    
     await ctx.editMessageText(text, { 
         parse_mode: 'HTML', 
         reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('📝 Order Form (My Form)', 'start_form')],
-            [Markup.button.callback('💼 Services', 'srv_menu_en')],
-            [Markup.button.callback('🌍 Change Language', 'cmd_back')]
+            [Markup.button.callback(isEn ? 'Packages' : 'የጥቅል ዝርዝሮች', 'menu_packages')],
+            [Markup.button.callback(isEn ? 'Individuals' : 'ነጠላ አገልግሎቶች', 'menu_individuals')],
+            [Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_main')]
         ]).reply_markup 
     });
 });
 
-bot.action('srv_menu_en', async (ctx) => {
+// --- Packages ---
+bot.action('menu_packages', async (ctx) => {
     await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n${I} Strategic solutions for your digital growth.`;
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn ? `${TITLE}\n\n${I} Professional Service Packages.` : `${TITLE}\n\n${I} የፕሮፌሽናል የአገልግሎት ጥቅሎች።`;
+    
     await ctx.editMessageText(text, { 
         parse_mode: 'HTML', 
         reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('📦 Premium Packages', 'pkg_menu_en')],
-            [Markup.button.callback('📌 Individual Services', 'indv_srv_en')],
-            [Markup.button.callback('⬅️ Back', 'main_en')]
+            [Markup.button.callback('Ascent Package', 'pkg_asc')],
+            [Markup.button.callback('Apex Package', 'pkg_apx')],
+            [Markup.button.callback('Zenith Package', 'pkg_zen')],
+            [Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_services')]
+        ]).reply_markup 
+    });
+});
+
+bot.action('pkg_asc', async (ctx) => {
+    await ctx.answerCbQuery();
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn 
+        ? `${TITLE}\n\n<b>[ Ascent Package ]</b>\n\n${I} Branding Basics (Logo & Identity)\n${I} Basic Web Setup\n${I} 10 Social Media Posts/Month\n\n<b>Fixed Price:</b> 9,000 ETB`
+        : `${TITLE}\n\n<b>[ Ascent Package ]</b>\n\n${I} የብራንዲንግ መሰረት (Logo & Identity)\n${I} መሠረታዊ የገፅ ግንባታ\n${I} በወር 10 የሶሻል ሚዲያ ፖስቶች\n\n<b>ቋሚ ዋጋ:</b> 9,000 ብር`;
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback(isEn ? 'Pay Now' : 'ክፈይ (Pay)', 'pay_Ascent_9000_30')], [Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_packages')]]).reply_markup });
+});
+
+bot.action('pkg_apx', async (ctx) => {
+    await ctx.answerCbQuery();
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn 
+        ? `${TITLE}\n\n<b>[ Apex Package ]</b>\n\n${I} Glassmorphism UI/UX Website\n${I} Advanced Ad Management\n${I} Google Dominance (SEO)\n\n<b>Fixed Price:</b> 18,500 ETB`
+        : `${TITLE}\n\n<b>[ Apex Package ]</b>\n\n${I} Glassmorphism UI/UX ዌብሳይት\n${I} የላቀ የማስታወቂያ አስተዳደር\n${I} የጎግል የበላይነት (SEO)\n\n<b>ቋሚ ዋጋ:</b> 18,500 ብር`;
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback(isEn ? 'Pay Now' : 'ክፈይ (Pay)', 'pay_Apex_18500_30')], [Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_packages')]]).reply_markup });
+});
+
+bot.action('pkg_zen', async (ctx) => {
+    await ctx.answerCbQuery();
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn 
+        ? `${TITLE}\n\n<b>[ Zenith Package ]</b>\n\n${I} Full Agency Automation\n${I} Telegram Bot Integrations\n${I} AI Tools & Dropshipping Setup\n\n<b>Fixed Price:</b> 50,000 ETB`
+        : `${TITLE}\n\n<b>[ Zenith Package ]</b>\n\n${I} ሙሉ የኤጀንሲ አውቶሜሽን\n${I} ቴሌግራም ቦት ትስስር\n${I} AI Tools እና Dropshipping አዘገጃጀት\n\n<b>ቋሚ ዋጋ:</b> 50,000 ብር`;
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback(isEn ? 'Pay Now' : 'ክፈይ (Pay)', 'pay_Zenith_50000_30')], [Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_packages')]]).reply_markup });
+});
+
+// --- Individuals ---
+bot.action('menu_individuals', async (ctx) => {
+    await ctx.answerCbQuery();
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn 
+        ? `${TITLE}\n\n<b>Individual Services</b>\n\n${I} Select a service below to order.`
+        : `${TITLE}\n\n<b>ነጠላ አገልግሎቶች</b>\n\n${I} ለማዘዝ ከታች አንዱን ይምረጡ።`;
+        
+    await ctx.editMessageText(text, { 
+        parse_mode: 'HTML', 
+        reply_markup: Markup.inlineKeyboard([
+            [Markup.button.callback('Logo Design (2,500 ETB)', 'pay_Logo_2500_5')],
+            [Markup.button.callback('Website Dev (15,000 ETB)', 'pay_Website_15000_20')],
+            [Markup.button.callback('Telegram Bot (5,000 ETB)', 'pay_Bot_5000_15')],
+            [Markup.button.callback('Social Audit (3,000 ETB)', 'pay_Audit_3000_5')],
+            [Markup.button.callback('Business Card (1,000 ETB)', 'pay_Card_1000_5')],
+            [Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_services')]
         ]).reply_markup 
     });
 });
 
 // ==========================================
-// FORM FILLING SYSTEM (SMART LOGIC)
+// 3. MORE MENU (About, Contact, FAQ, Support)
+// ==========================================
+bot.action('menu_more', async (ctx) => {
+    await ctx.answerCbQuery();
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn ? `${TITLE}\n\n${I} More Information:` : `${TITLE}\n\n${I} ተጨማሪ መረጃዎች፡`;
+    
+    await ctx.editMessageText(text, { 
+        parse_mode: 'HTML', 
+        reply_markup: Markup.inlineKeyboard([
+            [Markup.button.callback('About Us', 'more_about'), Markup.button.callback('Contact Us', 'more_contact')],
+            [Markup.button.callback('FAQ', 'more_faq'), Markup.button.callback('Support', 'more_support')],
+            [Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_main')]
+        ]).reply_markup 
+    });
+});
+
+bot.action('more_about', async (ctx) => {
+    await ctx.answerCbQuery();
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn 
+        ? `${TITLE}\n\n<b>About Us</b>\n\n${I} APEX Digital Solution (Est. 2026) is a premier digital agency based in Addis Ababa, Ethiopia.\n${I} We specialize in Website Design, Digital Marketing, Social Media Management, Branding, and Business Automation.`
+        : `${TITLE}\n\n<b>ስለ እኛ (About Us)</b>\n\n${I} APEX Digital Solution አዲስ አበባ፣ ኢትዮጵያ ውስጥ የሚገኝ ዘመናዊ ዲጂታል ኤጀንሲ ነው።\n${I} በዌብሳይት ዲዛይን፣ ዲጂታል ማርኬቲንግ፣ ብራንዲንግ እና ቢዝነስ አውቶሜሽን ላይ ትልቅ ልምድ አለን።`;
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_more')]]).reply_markup });
+});
+
+bot.action('more_contact', async (ctx) => {
+    await ctx.answerCbQuery();
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn 
+        ? `${TITLE}\n\n<b>Contact Us</b>\n\n${I} Email: info@apexdigital.et\n${I} Location: Addis Ababa, Ethiopia\n${I} Telegram: @ApexDigitalSupport`
+        : `${TITLE}\n\n<b>አድራሻ (Contact Us)</b>\n\n${I} ኢሜይል: info@apexdigital.et\n${I} አድራሻ: አዲስ አበባ፣ ኢትዮጵያ\n${I} ቴሌግራም: @ApexDigitalSupport`;
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_more')]]).reply_markup });
+});
+
+bot.action('more_faq', async (ctx) => {
+    await ctx.answerCbQuery();
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn 
+        ? `${TITLE}\n\n<b>FAQ</b>\n\n${I} Q: How long does a website take?\n${I} A: Typically 20 days.\n\n${I} Q: Do you offer revisions?\n${I} A: Yes, 3 consecutive days of free revisions are included.`
+        : `${TITLE}\n\n<b>የሚዘወተሩ ጥያቄዎች (FAQ)</b>\n\n${I} ጥ: ዌብሳይት ለመስራት ስንት ቀን ይፈጃል?\n${I} መ: በአማካይ 20 ቀናት ይፈጃል።\n\n${I} ጥ: ማስተካከያ ማድረግ ይቻላል?\n${I} መ: አዎ፣ ስራው ካለቀ በኋላ ለ 3 ተከታታይ ቀናት ነፃ ማሻሻያ እናደርጋለን።`;
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_more')]]).reply_markup });
+});
+
+bot.action('more_support', async (ctx) => {
+    await ctx.answerCbQuery();
+    const isEn = ctx.session.lang === 'en';
+    const text = isEn 
+        ? `${TITLE}\n\n<b>Support</b>\n\n${I} For immediate assistance or custom requests, please contact our support team at @ApexDigitalSupport.`
+        : `${TITLE}\n\n<b>የደንበኞች ድጋፍ (Support)</b>\n\n${I} ለፈጣን ምላሽ እና ለተጨማሪ ጥያቄዎች እባክዎ @ApexDigitalSupport ላይ ያናግሩን።`;
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_more')]]).reply_markup });
+});
+
+// ==========================================
+// 4. FORM FILLING SYSTEM
 // ==========================================
 bot.action('start_form', async (ctx) => {
     await ctx.answerCbQuery();
     const isEn = ctx.session.lang === 'en';
     
-    // ፎርም አስቀድሞ ከሞላ
     if (ctx.session.formStatus === 'completed') {
         const msg = isEn 
-            ? `${TITLE}\n\n${I} ✅ <b>You have already filled out the form.</b>\nYour details are saved securely.` 
-            : `${TITLE}\n\n${I} ✅ <b>ፎርሙን አስቀድመው ሞልተዋል።</b>\nመረጃዎ በጥንቃቄ ተቀምጧል።`;
+            ? `${TITLE}\n\n${I} <b>You have already filled out the form.</b>` 
+            : `${TITLE}\n\n${I} <b>ፎርሙን አስቀድመው ሞልተዋል።</b>`;
             
-        const editBtn = isEn ? '✏️ Edit Form' : '✏️ ፎርሙን አስተካክል';
-        const backBtn = isEn ? '⬅️ Back to Services' : '⬅️ ወደ አገልግሎቶች ተመለስ';
-        const backAction = isEn ? 'srv_menu_en' : 'srv_menu_am';
-
         return ctx.editMessageText(msg, {
             parse_mode: 'HTML',
             reply_markup: Markup.inlineKeyboard([
-                [Markup.button.callback(editBtn, 'edit_form')],
-                [Markup.button.callback(backBtn, backAction)]
+                [Markup.button.callback(isEn ? 'Edit Form' : 'ፎርሙን አስተካክል', 'edit_form')],
+                [Markup.button.callback(isEn ? 'Back' : 'ተመለስ', 'menu_main')]
             ]).reply_markup
         });
     }
 
-    // አዲስ ፎርም ሲሆን
     ctx.session.step = 'name';
     const warningText = isEn 
-        ? `${TITLE}\n\n${I} <b>WARNING</b>\nPlease provide accurate information. This is required for the legal contract.\n\n${I} 1. Enter your Full Name:`
-        : `${TITLE}\n\n${I} <b>ማሳሰቢያ (WARNING)</b>\nእባክዎ ትክክለኛ መረጃዎችን ብቻ ያስገቡ! ይህ መረጃ ህጋዊ ውል ለመዋዋል ግዴታ ነው።\n\n${I} 1. ሙሉ ስምዎን ያስገቡ:`;
+        ? `${TITLE}\n\n${I} <b>WARNING</b>\nPlease provide accurate information.\n\n${I} 1. Enter your Full Name:`
+        : `${TITLE}\n\n${I} <b>ማሳሰቢያ (WARNING)</b>\nእባክዎ ትክክለኛ መረጃዎችን ብቻ ያስገቡ!\n\n${I} 1. ሙሉ ስምዎን ያስገቡ:`;
         
     await ctx.editMessageText(warningText, { parse_mode: 'HTML' });
 });
@@ -166,10 +263,7 @@ bot.action('edit_form', async (ctx) => {
     ctx.session.formStatus = 'incomplete';
     ctx.session.step = 'name';
     
-    const text = isEn 
-        ? `${TITLE}\n\n${I} Starting over.\n\n${I} 1. Enter your Full Name:`
-        : `${TITLE}\n\n${I} ፎርሙን እንደ አዲስ እየሞሉ ነው።\n\n${I} 1. ሙሉ ስምዎን ያስገቡ:`;
-        
+    const text = isEn ? `${TITLE}\n\n${I} 1. Enter your Full Name:` : `${TITLE}\n\n${I} 1. ሙሉ ስምዎን ያስገቡ:`;
     await ctx.editMessageText(text, { parse_mode: 'HTML' });
 });
 
@@ -199,16 +293,16 @@ bot.on('text', async (ctx, next) => {
     } else if (step === 'address') {
         ctx.session.form.address = text;
         ctx.session.step = 'idle';
-        ctx.session.formStatus = 'completed'; // ፎርም መሞላቱን ማረጋገጫ
+        ctx.session.formStatus = 'completed'; 
         
         const summary = isEn 
-            ? `${TITLE}\n\n${I} <b>Form Saved Successfully!</b>\n\n${I} Name: ${ctx.session.form.name}\n${I} Phone: ${ctx.session.form.phone}\n${I} Company: ${ctx.session.form.company}\n${I} Email: ${ctx.session.form.email}\n${I} Address: ${ctx.session.form.address}`
-            : `${TITLE}\n\n${I} <b>መረጃዎ በተሳካ ሁኔታ ተመዝግቧል!</b>\n\n${I} ስም: ${ctx.session.form.name}\n${I} ስልክ: ${ctx.session.form.phone}\n${I} ድርጅት: ${ctx.session.form.company}\n${I} ኢሜይል: ${ctx.session.form.email}\n${I} አድራሻ: ${ctx.session.form.address}`;
+            ? `${TITLE}\n\n${I} <b>Form Saved Successfully!</b>\n\n${I} Name: ${ctx.session.form.name}\n${I} Phone: ${ctx.session.form.phone}\n${I} Company: ${ctx.session.form.company}`
+            : `${TITLE}\n\n${I} <b>መረጃዎ በተሳካ ሁኔታ ተመዝግቧል!</b>\n\n${I} ስም: ${ctx.session.form.name}\n${I} ስልክ: ${ctx.session.form.phone}\n${I} ድርጅት: ${ctx.session.form.company}`;
         
         await ctx.replyWithHTML(summary, {
             reply_markup: Markup.inlineKeyboard([
-                [Markup.button.callback(isEn ? '✏️ Edit Form' : '✏️ ፎርሙን አስተካክል', 'edit_form')],
-                [Markup.button.callback(isEn ? '💼 Go to Services' : '💼 ወደ አገልግሎቶች', isEn ? 'srv_menu_en' : 'srv_menu_am')]
+                [Markup.button.callback(isEn ? 'Edit Form' : 'ፎርሙን አስተካክል', 'edit_form')],
+                [Markup.button.callback(isEn ? 'Go to Services' : 'ወደ አገልግሎቶች', 'menu_services')]
             ]).reply_markup
         });
     } else {
@@ -217,103 +311,7 @@ bot.on('text', async (ctx, next) => {
 });
 
 // ==========================================
-// PACKAGE DETAILS (AMHARIC & ENGLISH)
-// ==========================================
-
-// --- AMHARIC PACKAGES ---
-bot.action('pkg_menu_am', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n${I} የፕሮፌሽናል የአገልግሎት ጥቅሎች።`;
-    await ctx.editMessageText(text, { 
-        parse_mode: 'HTML', 
-        reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('🚀 Ascent (የመጀመሪያው እርምጃ)', 'pkg_asc_am')],
-            [Markup.button.callback('⚡ Apex (የሽያጭ ማሳደጊያ)', 'pkg_apx_am')],
-            [Markup.button.callback('👑 Zenith (የንግድ ግዛት መገንቢያ)', 'pkg_zen_am')],
-            [Markup.button.callback('⬅️ ተመለስ', 'srv_menu_am')]
-        ]).reply_markup 
-    });
-});
-
-bot.action('pkg_asc_am', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n<b>[ 🚀 Ascent - የመጀመሪያው እርምጃ ]</b>\n\n${I} የብራንዲንግ መሰረት (Logo & Identity)\n${I} መሠረታዊ የገፅ ግንባታ\n${I} በወር 10 የሶሻል ሚዲያ ፖስቶች\n\n<b>ቋሚ ዋጋ:</b> 9,000 ብር`;
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback('💳 ክፈይ (Pay)', 'pay_Ascent_9000_30')], [Markup.button.callback('⬅️ ተመለስ', 'pkg_menu_am')]]).reply_markup });
-});
-
-bot.action('pkg_apx_am', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n<b>[ ⚡ Apex - የሽያጭ ማሳደጊያ ]</b>\n\n${I} Glassmorphism UI/UX ዌብሳይት\n${I} የላቀ የማስታወቂያ አስተዳደር\n${I} የጎግል የበላይነት (SEO)\n\n<b>ቋሚ ዋጋ:</b> 18,500 ብር`;
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback('💳 ክፈይ (Pay)', 'pay_Apex_18500_30')], [Markup.button.callback('⬅️ ተመለስ', 'pkg_menu_am')]]).reply_markup });
-});
-
-bot.action('pkg_zen_am', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n<b>[ 👑 Zenith - የንግድ ግዛት መገንቢያ ]</b>\n\n${I} ሙሉ የኤጀንሲ አውቶሜሽን\n${I} ቴሌግራም ቦት ትስስር\n${I} AI Tools እና Dropshipping አዘገጃጀት\n\n<b>ቋሚ ዋጋ:</b> 50,000 ብር`;
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback('💳 ክፈይ (Pay)', 'pay_Zenith_50000_30')], [Markup.button.callback('⬅️ ተመለስ', 'pkg_menu_am')]]).reply_markup });
-});
-
-bot.action('indv_srv_am', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n<b>📌 ነጠላ አገልግሎቶች</b>\n\n${I} ሎጎ (5 ቀን) - 2,500 ብር\n${I} ዌብሳይት (20 ቀን) - 15,000 ብር\n${I} ቴሌግራም ቦት (15 ቀን) - 5,000 ብር\n${I} ሶሻል ኦዲት (5 ቀን) - 3,000 ብር\n${I} ቢዝነስ ካርድ (5 ቀን) - 1,000 ብር`;
-    await ctx.editMessageText(text, { 
-        parse_mode: 'HTML', 
-        reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('💳 ሎጎ ክፈይ', 'pay_Logo_2500_5'), Markup.button.callback('💳 ዌብሳይት ክፈይ', 'pay_Website_15000_20')],
-            [Markup.button.callback('💳 ቦት ክፈይ', 'pay_Bot_5000_15'), Markup.button.callback('💳 ካርድ ክፈይ', 'pay_BusinessCard_1000_5')],
-            [Markup.button.callback('⬅️ ተመለስ', 'srv_menu_am')]
-        ]).reply_markup 
-    });
-});
-
-// --- ENGLISH PACKAGES ---
-bot.action('pkg_menu_en', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n${I} Professional Service Packages.`;
-    await ctx.editMessageText(text, { 
-        parse_mode: 'HTML', 
-        reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('🚀 Ascent (Foundation)', 'pkg_asc_en')],
-            [Markup.button.callback('⚡ Apex (Growth)', 'pkg_apx_en')],
-            [Markup.button.callback('👑 Zenith (Empire)', 'pkg_zen_en')],
-            [Markup.button.callback('⬅️ Back', 'srv_menu_en')]
-        ]).reply_markup 
-    });
-});
-
-bot.action('pkg_asc_en', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n<b>[ 🚀 Ascent - Foundation ]</b>\n\n${I} Branding Basics (Logo & Identity)\n${I} Basic Web Setup\n${I} 10 Social Media Posts/Month\n\n<b>Fixed Price:</b> 9,000 ETB`;
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback('💳 Pay Now', 'pay_Ascent_9000_30')], [Markup.button.callback('⬅️ Back', 'pkg_menu_en')]]).reply_markup });
-});
-
-bot.action('pkg_apx_en', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n<b>[ ⚡ Apex - Growth ]</b>\n\n${I} Glassmorphism UI/UX Website\n${I} Advanced Ad Management\n${I} Google Dominance (SEO)\n\n<b>Fixed Price:</b> 18,500 ETB`;
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback('💳 Pay Now', 'pay_Apex_18500_30')], [Markup.button.callback('⬅️ Back', 'pkg_menu_en')]]).reply_markup });
-});
-
-bot.action('pkg_zen_en', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n<b>[ 👑 Zenith - Empire ]</b>\n\n${I} Full Agency Automation\n${I} Telegram Bot Integrations\n${I} AI Tools & Dropshipping Setup\n\n<b>Fixed Price:</b> 50,000 ETB`;
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard([[Markup.button.callback('💳 Pay Now', 'pay_Zenith_50000_30')], [Markup.button.callback('⬅️ Back', 'pkg_menu_en')]]).reply_markup });
-});
-
-bot.action('indv_srv_en', async (ctx) => {
-    await ctx.answerCbQuery();
-    const text = `${TITLE}\n\n<b>📌 Individual Services</b>\n\n${I} Logo (5 Days) - 2,500 ETB\n${I} Website (20 Days) - 15,000 ETB\n${I} Telegram Bot (15 Days) - 5,000 ETB\n${I} Social Audit (5 Days) - 3,000 ETB\n${I} Business Card (5 Days) - 1,000 ETB`;
-    await ctx.editMessageText(text, { 
-        parse_mode: 'HTML', 
-        reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('💳 Pay Logo', 'pay_Logo_2500_5'), Markup.button.callback('💳 Pay Website', 'pay_Website_15000_20')],
-            [Markup.button.callback('💳 Pay Bot', 'pay_Bot_5000_15'), Markup.button.callback('💳 Pay Card', 'pay_BusinessCard_1000_5')],
-            [Markup.button.callback('⬅️ Back', 'srv_menu_en')]
-        ]).reply_markup 
-    });
-});
-
-// ==========================================
-// CHAPA API PAYMENT & CONTRACT GENERATION
+// 5. CHAPA PAYMENT & CONTRACT
 // ==========================================
 const CHAPA_SECRET = process.env.CHAPA_SECRET || "CHASECK_TEST-ivIbhQprzFcn2DHeO8q75xvZ4X8PXMF6";
 
@@ -323,19 +321,12 @@ bot.action(/pay_([a-zA-Z]+)_(\d+)_(\d+)/, async (ctx) => {
     const amount = ctx.match[2];
     const durationDays = ctx.match[3];
     
-    // ፎርም መሞላቱን ማረጋገጥ
     if (ctx.session.formStatus !== 'completed') {
-        const alertMsg = isEn ? 'Please fill the form first!' : 'እባክዎ መጀመሪያ ፎርም ይሙሉ!';
-        const replyMsg = isEn ? `${TITLE}\n\n${I} You must fill out your details to generate a contract.` : `${TITLE}\n\n${I} ኮንትራት ለማዘጋጀት መጀመሪያ መረጃዎን ማስገባት አለቦት።`;
-        
-        await ctx.answerCbQuery(alertMsg, { show_alert: true });
-        return ctx.replyWithHTML(replyMsg, {
-            reply_markup: Markup.inlineKeyboard([[Markup.button.callback(isEn ? '📝 Fill Form' : '📝 ፎርም ሙላ', 'start_form')]]).reply_markup
-        });
+        await ctx.answerCbQuery(isEn ? 'Please fill the form first!' : 'እባክዎ መጀመሪያ ፎርም ይሙሉ!', { show_alert: true });
+        return;
     }
 
     await ctx.answerCbQuery('Processing payment...', { show_alert: false });
-
     ctx.session.pendingContract = { serviceName, amount, durationDays };
 
     const tx_ref = `APEX-${Date.now()}`;
@@ -357,32 +348,29 @@ bot.action(/pay_([a-zA-Z]+)_(\d+)_(\d+)/, async (ctx) => {
 
         if (response.data?.data?.checkout_url) {
             const paymentText = isEn 
-                ? `${TITLE}\n\n${I} <b>Payment Generated!</b>\n\n${I} Click the link below to pay <b>${amount} ETB</b>. After payment, click 'Check Payment'.`
-                : `${TITLE}\n\n${I} <b>ክፍያ ተዘጋጅቷል!</b>\n\n${I} ከታች ያለውን ሊንክ በመጫን <b>${amount} ብር</b> ይክፈሉ። ከከፈሉ በኋላ 'ክፍያ አጠናቅቄያለሁ' የሚለውን ይጫኑ።`;
+                ? `${TITLE}\n\n${I} <b>Payment Generated!</b>\n\n${I} Click the link below to pay <b>${amount} ETB</b>.`
+                : `${TITLE}\n\n${I} <b>ክፍያ ተዘጋጅቷል!</b>\n\n${I} ከታች ያለውን ሊንክ በመጫን <b>${amount} ብር</b> ይክፈሉ።`;
             
             await ctx.editMessageText(paymentText, {
                 parse_mode: 'HTML',
                 reply_markup: Markup.inlineKeyboard([
-                    [Markup.button.url(isEn ? '🔗 Pay Now' : '🔗 ይክፈሉ (Pay Now)', response.data.data.checkout_url)],
-                    [Markup.button.callback(isEn ? '✅ Check Payment' : '✅ ክፍያ አጠናቅቄያለሁ', 'verify_payment')],
-                    [Markup.button.callback(isEn ? '⬅️ Cancel' : '⬅️ ተመለስ', isEn ? 'srv_menu_en' : 'srv_menu_am')]
+                    [Markup.button.url(isEn ? 'Pay Now' : 'ይክፈሉ (Pay Now)', response.data.data.checkout_url)],
+                    [Markup.button.callback(isEn ? 'Check Payment' : 'ክፍያ አጠናቅቄያለሁ', 'verify_payment')],
+                    [Markup.button.callback(isEn ? 'Cancel' : 'ተመለስ', 'menu_services')]
                 ]).reply_markup
             });
-        } else {
-            await ctx.answerCbQuery('Failed to initialize payment.', { show_alert: true });
         }
     } catch (error) {
-        await ctx.answerCbQuery('Payment error. Please try again.', { show_alert: true });
+        await ctx.answerCbQuery('Payment error.', { show_alert: true });
     }
 });
 
-// Verify Payment and Generate Contract
 bot.action('verify_payment', async (ctx) => {
     await ctx.answerCbQuery();
     const isEn = ctx.session.lang === 'en';
     
     if (!ctx.session || !ctx.session.pendingContract) {
-        return ctx.replyWithHTML(`${TITLE}\n\n${I} ${isEn ? 'No pending payment found.' : 'የክፍያ መረጃ አልተገኘም።'}`);
+        return ctx.replyWithHTML(`${TITLE}\n\n${I} ${isEn ? 'No payment found.' : 'የክፍያ መረጃ አልተገኘም።'}`);
     }
 
     const { serviceName, amount, durationDays } = ctx.session.pendingContract;
@@ -391,73 +379,45 @@ bot.action('verify_payment', async (ctx) => {
 
     const contractText = isEn ? `
 ${TITLE}
-<b>APEX Digital Solution Full Agreement</b>
-
-${I} Valid for both Package and Individual Services.
-<b>Service Agreement Contract</b>
+<b>APEX Digital Solution Agreement</b>
 
 <b>Parties Involved</b>
-${I} Agency: APEX Digital Solution (Ethiopia)
-${I} Client: <b>${clientName}</b> (Hereinafter referred to as "Client")
-${I} Date: ${dates.start}
+${I} Agency: APEX Digital Solution
+${I} Client: <b>${clientName}</b>
 
-<b>Service Details & Timeline</b>
-${I} Selected Service/Package: <b>${serviceName}</b>
-${I} Start Date: ${dates.start}
-${I} End Date: ${dates.end} (Total <b>${durationDays}</b> Days of work)
+<b>Service Details</b>
+${I} Selected Service: <b>${serviceName}</b>
+${I} Duration: <b>${durationDays}</b> Days
 
 <b>Payment Terms</b>
-${I} The Client has paid a total of <b>${amount} ETB</b> via Chapa. This payment is non-refundable.
-
-<b>Obligations & Rights</b>
-${I} Agency: Deliver high-quality work within the deadline.
-${I} Client: Provide required assets within 2 days.
-${I} Revisions: 3 consecutive days of free revisions after delivery.
-${I} Ownership: Full ownership transfers upon completion.
+${I} The Client has paid <b>${amount} ETB</b>.
 ` : `
 ${TITLE}
-<b>የ APEX Digital Solution ሙሉ የውል ስምምነት</b>
-
-${I} ይህ ፎርማት ለጥቅልም ሆነ ለንጥል ስራዎች ይሆናል።
-<b>የአገልግሎት ስምምነት ውል (Service Agreement)</b>
+<b>የ APEX Digital Solution ውል ስምምነት</b>
 
 <b>የተዋዋይ ወገኖች መረጃ</b>
-${I} ኤጀንሲ፦ APEX Digital Solution (Ethiopia)
-${I} ደንበኛ፦ <b>${clientName}</b> (ከዚህ በኋላ "ደንበኛ" እየተባለ የሚጠራ)
-${I} የውል ቀን፦ ${dates.start}
+${I} ኤጀንሲ፦ APEX Digital Solution
+${I} ደንበኛ፦ <b>${clientName}</b>
 
-<b>የአገልግሎት ዝርዝር እና የጊዜ ገደብ</b>
-${I} የተመረጠው አገልግሎት/ጥቅል፦ <b>${serviceName}</b>
-${I} የስራው መጀመሪያ ቀን፦ ${dates.start}
-${I} የስራው ማጠናቀቂያ ቀን፦ ${dates.end} (ጠቅላላ የ <b>${durationDays}</b> ቀናት ስራ)
+<b>የአገልግሎት ዝርዝር</b>
+${I} የተመረጠው አገልግሎት፦ <b>${serviceName}</b>
+${I} የጊዜ ገደብ፦ <b>${durationDays}</b> ቀናት
 
 <b>የክፍያ ሁኔታ</b>
-${I} ደንበኛው ለተጠቀሰው አገልግሎት ጠቅላላ <b>${amount} ETB</b> በ Chapa በኩል የከፈለ ሲሆን፣ ይህ ክፍያ ተመላሽ (Non-refundable) አይደረግም።
-
-<b>ግዴታዎች እና መብቶች</b>
-${I} የኤጀንሲው ግዴታ፦ ስራውን በታቀደው የጊዜ ገደብ በጥራት ማጠናቀቅ።
-${I} የደንበኛው ግዴታ፦ ለስራው የሚያስፈልጉ ግብዓቶችን በ 2 ቀናት ውስጥ ማቅረብ።
-${I} ማሻሻያ፦ ስራው ከተረከበ በኋላ ለ 3 ቀናት ነፃ ማሻሻያ የመጠየቅ መብት።
-${I} ባለቤትነት፦ ክፍያው እንደተጠናቀቀ የዲዛይኑ ባለቤትነት ለደንበኛው ይተላለፋል።
+${I} ደንበኛው <b>${amount} ETB</b> ከፍሏል።
 `;
 
-    const successMsg = isEn ? `<b>Congratulations! Your contract is ready.</b>` : `<b>እንኳን ደስ አለዎት! ኮንትራትዎ ተዘጋጅቷል::</b>`;
-
-    await ctx.replyWithHTML(`${TITLE}\n\n${successMsg}\n\n${contractText}`, {
+    await ctx.replyWithHTML(`${contractText}`, {
         reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('📄 Download PDF Contract', 'download_pdf')]
+            [Markup.button.callback('Download PDF Contract', 'download_pdf')]
         ]).reply_markup
     });
 });
 
-// Generate and Send PDF
 bot.action('download_pdf', async (ctx) => {
-    await ctx.answerCbQuery('Generating PDF...', { show_alert: false });
-    const isEn = ctx.session.lang === 'en';
-    
+    await ctx.answerCbQuery('Generating PDF...');
     const { serviceName, amount, durationDays } = ctx.session.pendingContract;
     const clientName = ctx.session.form.name;
-    const dates = getContractDates(durationDays);
 
     const doc = new PDFDocument({ margin: 50 });
     const buffers = [];
@@ -467,7 +427,7 @@ bot.action('download_pdf', async (ctx) => {
         const pdfData = Buffer.concat(buffers);
         await ctx.replyWithDocument(
             { source: pdfData, filename: `APEX_Contract_${clientName.replace(/\s+/g, '_')}.pdf` },
-            { caption: isEn ? `${I} Here is your official contract.` : `${I} የውል ስምምነትዎ ይኸው (Here is your contract).` }
+            { caption: `${I} Contract / የውል ስምምነት` }
         );
     });
 
@@ -475,25 +435,11 @@ bot.action('download_pdf', async (ctx) => {
     doc.fontSize(16).text('Service Agreement Contract', { underline: true, align: 'center' }).moveDown(2);
     
     doc.fontSize(12)
-       .text(`Agency: APEX Digital Solution (Ethiopia)`)
        .text(`Client Name: ${clientName}`)
-       .text(`Contract Date: ${dates.start}`)
+       .text(`Service: ${serviceName}`)
+       .text(`Duration: ${durationDays} Days`)
+       .text(`Amount Paid: ${amount} ETB`)
        .moveDown();
-       
-    doc.text(`Selected Service/Package: ${serviceName}`)
-       .text(`Start Date: ${dates.start}`)
-       .text(`End Date: ${dates.end} (Total ${durationDays} Days)`)
-       .moveDown();
-
-    doc.text(`Payment Terms:`)
-       .text(`The client has paid a total of ${amount} ETB via Chapa. This payment is non-refundable.`)
-       .moveDown();
-
-    doc.text(`Obligations & Rights:`)
-       .text(`- Agency: Deliver high-quality work within the deadline.`)
-       .text(`- Client: Provide required assets (Text, Logo, Photos) within 2 days.`)
-       .text(`- Revisions: 3 consecutive days of free revisions after delivery.`)
-       .text(`- Ownership: Full ownership transfers to the client upon completion.`);
 
     doc.end();
 });
